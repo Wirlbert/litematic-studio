@@ -145,7 +145,7 @@ Issues and pull requests welcome. Useful things to pick up:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Third-party notices are in [NOTICE.md](NOTICE.md).
 
 No Minecraft assets are included in or redistributed by this repository; textures are read at
 runtime from the copy of the game you already have. Not affiliated with Mojang Studios.
@@ -279,7 +279,7 @@ Issue 和 PR 都歡迎。可以接手的東西：
 
 ## 授權
 
-MIT，見 [LICENSE](LICENSE)。
+MIT，見 [LICENSE](LICENSE)。第三方聲明在 [NOTICE.md](NOTICE.md)。
 
 本專案不包含也不散布任何 Minecraft 素材，材質是執行時從你自己已經安裝的遊戲讀取的。
 與 Mojang Studios 無關。
