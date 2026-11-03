@@ -1,0 +1,23 @@
+# three.js，第一次啟動時自動下載
+vendor/
+
+# 儲存前的自動備份
+backups/
+
+# 不要把別人的 schematic 收進版本庫
+*.litematic
+*.litematic.bak
+*.litematic.tmp
+*.schem
+*.schematic
+*.nbt
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

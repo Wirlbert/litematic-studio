@@ -1,0 +1,2 @@
+# litemapy 會一併裝上 numpy 與 nbtlib
+litemapy>=0.11.0b0

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Litematic Studio</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">Litematic&nbsp;Studio</div>
+  <div class="hdr-file" id="hdrFile">尚未載入檔案</div>
+  <div class="hdr-actions">
+    <span id="dirty" class="dirty hidden">● 未儲存</span>
+    <button id="btnSave" class="primary" disabled>儲存 (Ctrl+S)</button>
+    <button id="btnRevert" disabled>放棄變更</button>
+    <button id="btnBackups" disabled>備份…</button>
+  </div>
+</header>
+
+<div id="app">
+
+  <aside id="left">
+    <div class="panel">
+      <div class="panel-title">
+        <span>Schematic 檔案</span>
+        <button id="btnReloadFiles" class="mini">↻</button>
+      </div>
+      <div id="fileList" class="list"></div>
+      <div id="rootPath" class="hint"></div>
+    </div>
+
+    <div class="panel" id="infoPanel">
+      <div class="panel-title"><span>資訊</span></div>
+      <div id="info" class="info"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span>顯示</span></div>
+      <label class="row">Y 層範圍
+        <span id="yLabel" class="mono"></span>
+      </label>
+      <input type="range" id="yMin" min="0" max="1" value="0">
+      <input type="range" id="yMax" min="0" max="1" value="1">
+      <label class="chk"><input type="checkbox" id="chkTex" checked> 使用遊戲材質</label>
+      <div id="texNote" class="hint"></div>
+      <label class="chk"><input type="checkbox" id="chkGhost" checked> 選取時其他方塊透明化</label>
+      <label class="chk"><input type="checkbox" id="chkOnlySel"> 只顯示選取的方塊</label>
+      <label class="chk"><input type="checkbox" id="chkCull" checked> 隱藏看不見的面</label>
+      <label class="chk"><input type="checkbox" id="chkBox" checked> 顯示外框</label>
+      <div class="btnrow">
+        <button id="btnFit" class="mini">置中</button>
+        <button id="btnTop" class="mini">俯視</button>
+        <button id="btnSide" class="mini">側視</button>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="view"></div>
+    <div id="hud" class="hud"></div>
+    <div id="viewbar">
+      <div class="modes">
+        <button id="modeView" class="mode active">瀏覽</button>
+        <button id="modeEdit" class="mode">單格編輯</button>
+      </div>
+      <div id="editHint" class="hint hidden">
+        左鍵=放目前筆刷　Shift+左鍵=吸取　Ctrl+左鍵=刪成空氣
+      </div>
+      <div class="spacer"></div>
+      <div id="counts" class="mono"></div>
+    </div>
+  </main>
+
+  <aside id="right">
+    <div class="panel grow">
+      <div class="panel-title">
+        <span>方塊</span>
+        <div class="tabs">
+          <button id="tabStates" class="tab active">依狀態</button>
+          <button id="tabIds" class="tab">依方塊</button>
+        </div>
+      </div>
+      <input type="search" id="search" placeholder="搜尋方塊…">
+      <div id="palette" class="list palette"></div>
+    </div>
+
+    <div class="panel" id="editPanel">
+      <div class="panel-title"><span>替換</span></div>
+      <div id="selInfo" class="selinfo">先在清單或 3D 畫面中選一個方塊</div>
+      <label class="row small">換成</label>
+      <input type="text" id="newBlock" list="blockList" placeholder="minecraft:stone[facing=north]" disabled>
+      <datalist id="blockList"></datalist>
+      <label class="chk"><input type="checkbox" id="chkAllStates"> 套用到所有同 ID 的狀態（保留朝向等）</label>
+      <div class="btnrow">
+        <button id="btnApply" class="primary" disabled>套用替換</button>
+        <button id="btnAir" disabled>刪成空氣</button>
+      </div>
+      <div class="panel-title mt"><span>筆刷（單格編輯用）</span></div>
+      <input type="text" id="brush" list="blockList" value="minecraft:stone">
+      <div id="msg" class="msg"></div>
+    </div>
+  </aside>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-title">備份</div>
+    <div id="backupList" class="list"></div>
+    <div class="btnrow end"><button id="btnCloseModal">關閉</button></div>
+  </div>
+</div>
+
+<script src="/vendor/three.min.js"></script>
+<script>if(!window.THREE){document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');}</script>
+<script src="/vendor/OrbitControls.js"></script>
+<script>if(window.THREE && !THREE.OrbitControls){document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');}</script>
+<script src="/web/blocks.js"></script>
+<script src="/web/app.js"></script>
+</body>
+</html>
