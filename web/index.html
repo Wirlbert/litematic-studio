@@ -67,10 +67,10 @@
         <button id="modeEdit" class="mode">單格編輯 <kbd>E</kbd></button>
       </div>
       <div id="modeHint" class="hint">
-        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 前後左右　<kbd>空白</kbd>／<kbd>Shift</kbd> 上下　按住 <kbd>Ctrl</kbd> 加速　右鍵拖曳 轉視角
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 前後左右　<kbd>空白</kbd>／<kbd>Shift</kbd> 上下　<kbd>Ctrl</kbd> 加速　右鍵拖曳 轉視角　左鍵點選方塊、拖曳框選範圍
       </div>
       <div id="editHint" class="hint hidden">
-        左鍵 = 放筆刷方塊　<kbd>Shift</kbd>+左鍵 = 吸取　<kbd>Ctrl</kbd>+左鍵 = 刪成空氣
+        左鍵 = 放筆刷方塊　左鍵拖曳 = 整塊填滿　<kbd>Shift</kbd>+左鍵 = 吸取　<kbd>Ctrl</kbd>+左鍵／拖曳 = 刪成空氣
       </div>
       <div class="spacer"></div>
       <div id="counts" class="mono"></div>
@@ -89,7 +89,7 @@
 
     <div class="panel" id="editPanel">
       <div class="panel-title"><span>替換</span></div>
-      <div id="selInfo" class="selinfo">在右上清單或 3D 畫面中選一個方塊</div>
+      <div id="selInfo" class="selinfo">在右上清單或 3D 畫面中選一個方塊，或在畫面上拖曳框選一塊範圍</div>
       <label class="row small">要換掉哪些</label>
       <select id="stateSel" disabled></select>
       <label class="row small">換成</label>
@@ -105,8 +105,8 @@
       <div class="panel-title"><span>筆刷</span></div>
       <input type="text" id="brush" list="blockList" value="minecraft:stone">
       <div class="hint">
-        切到下方的「單格編輯」之後，在 3D 畫面左鍵點一格，那一格就會變成這個方塊。
-        <kbd>Shift</kbd>+左鍵可以把畫面上的方塊吸過來當筆刷。
+        切到下方的「單格編輯」之後，在 3D 畫面左鍵點一格，那一格就會變成這個方塊；
+        左鍵拖曳則是一次填滿一整塊長方體。<kbd>Shift</kbd>+左鍵可以把畫面上的方塊吸過來當筆刷。
       </div>
       <div id="msg" class="msg"></div>
     </div>
@@ -136,7 +136,7 @@
           <dt>右鍵拖曳</dt><dd>轉動視角（轉頭，不是轉藍圖）</dd>
           <dt>滾輪</dt><dd>沿視線前進／後退</dd>
           <dt>中鍵拖曳</dt><dd>平移</dd>
-          <dt>左鍵</dt><dd>選取方塊（不會動到視角）</dd>
+          <dt>左鍵</dt><dd>選取方塊／拖曳框選範圍（不會動到視角）</dd>
         </dl>
       </div>
       <div class="keys-group">
@@ -164,7 +164,8 @@
         <dl>
           <dt><kbd>Q</kbd></dt><dd>瀏覽模式</dd>
           <dt><kbd>E</kbd></dt><dd>單格編輯模式</dd>
-          <dt><kbd>Del</kbd></dt><dd>選取的方塊刪成空氣</dd>
+          <dt>左鍵拖曳</dt><dd>框選一塊長方體（編輯模式＝用筆刷填滿）</dd>
+          <dt><kbd>Del</kbd></dt><dd>選取的方塊或範圍刪成空氣</dd>
           <dt><kbd>Esc</kbd></dt><dd>清除選取</dd>
           <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt><dd>儲存</dd>
           <dt><kbd>?</kbd></dt><dd>開關這份說明</dd>

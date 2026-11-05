@@ -9,6 +9,7 @@
     root: "", files: [], file: null, doc: null,
     regions: [],          // {name, min, size, palette, idx, info, models, full}
     sel: null,            // {id, state: null | {ri, index}}
+    range: null,          // {ri, lo:[i,j,k], hi:[i,j,k]} 拖曳框選的範圍
     mode: "view",
     textured: true,
     yLo: 0, yHi: 0, yFloor: 0, yCeil: 0,
@@ -48,7 +49,7 @@
   function num(n) { return n.toLocaleString(); }
 
   // ------------------------------------------------------------- three.js
-  var renderer, scene, camera, controls, hoverBox, boxGroup;
+  var renderer, scene, camera, controls, hoverBox, rangeBox, boxGroup;
   var meshes = [];
   var raycaster = new THREE.Raycaster();
   var dummy = new THREE.Object3D();
@@ -89,16 +90,29 @@
     hoverBox.visible = false;
     scene.add(hoverBox);
 
+    // 框選範圍的外框：用 1×1×1 的邊線再縮放，拖曳時不必一直重建幾何
+    rangeBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+      new THREE.LineBasicMaterial({ color: 0x5ad1ff })
+    );
+    rangeBox.visible = false;
+    scene.add(rangeBox);
+
     boxGroup = new THREE.Group();
     scene.add(boxGroup);
 
     window.addEventListener("resize", onResize);
-    renderer.domElement.addEventListener("mousemove", onMove);
-    renderer.domElement.addEventListener("click", onClick);
-    renderer.domElement.addEventListener("mousedown", onLookDown);
+    // 一律用 pointer 事件：OrbitControls 會在 pointerdown 上呼叫 preventDefault()，
+    // 那會讓相容的 mousedown / mousemove / mouseup 整串都不再發出（只剩 click）。
+    // 右鍵轉視角和左鍵拖曳框選都得靠「按住時移動」，所以不能用 mouse 事件。
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup", onPointerUp);
+    renderer.domElement.addEventListener("pointercancel", onPointerUp);
     renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
     renderer.domElement.addEventListener("contextmenu", function (e) { e.preventDefault(); });
-    renderer.domElement.addEventListener("mouseleave", function () {
+    renderer.domElement.addEventListener("pointerleave", function () {
+      if (LOOK.on || DRAG.on) return;
       hoverBox.visible = false; S.hover = null; updateHud();
     });
     lastFrame = performance.now();
@@ -119,7 +133,7 @@
   // 右鍵拖曳 = 轉自己的視角（第一人稱），不是繞著藍圖轉。
   // 做法：把軌道中心釘在相機正前方固定距離的位置，OrbitControls.update() 的
   // lookAt(target) 就等於轉頭；相機本身不會繞著藍圖跑。
-  var LOOK = { dist: 40, yaw: 0, pitch: 0, on: false, x: 0, y: 0 };
+  var LOOK = { dist: 40, yaw: 0, pitch: 0, on: false, pid: -1, x: 0, y: 0 };
   var LOOK_SENS = 0.0032;                 // 每像素的弧度
   var vL = new THREE.Vector3();
 
@@ -142,29 +156,11 @@
     controls.target.copy(camera.position).addScaledVector(vL, LOOK.dist);
   }
 
-  function onLookDown(ev) {
-    if (ev.button !== 2) return;
-    ev.preventDefault();
-    lookSync();
-    LOOK.on = true;
-    LOOK.x = ev.clientX; LOOK.y = ev.clientY;
-    hoverBox.visible = false; S.hover = null; updateHud();
-    window.addEventListener("mousemove", onLookMove);
-    window.addEventListener("mouseup", onLookUp);
-  }
-
-  function onLookMove(ev) {
-    if (!LOOK.on) return;
+  function lookStep(ev) {
     LOOK.yaw -= (ev.clientX - LOOK.x) * LOOK_SENS;
     LOOK.pitch -= (ev.clientY - LOOK.y) * LOOK_SENS;
     LOOK.x = ev.clientX; LOOK.y = ev.clientY;
     lookApply();
-  }
-
-  function onLookUp() {
-    LOOK.on = false;
-    window.removeEventListener("mousemove", onLookMove);
-    window.removeEventListener("mouseup", onLookUp);
   }
 
   // 滾輪 = 沿著視線前進／後退。用 OrbitControls 的 dolly 會把相機推向軌道中心，
@@ -175,6 +171,71 @@
     camera.getWorldDirection(vF);
     camera.position.addScaledVector(vF, step);
     controls.target.addScaledVector(vF, step);
+  }
+
+  // ------------------------------------------------------------- 指標
+  // 左鍵：點一下選方塊，按住拖曳框一個長方體範圍（單格編輯模式則是填滿範圍）
+  var DRAG = { on: false, pid: -1, anchor: null, cur: null, moved: false };
+
+  function grab(ev) {
+    try { renderer.domElement.setPointerCapture(ev.pointerId); } catch (e) {}
+  }
+
+  function drop(ev) {
+    try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch (e) {}
+  }
+
+  function onPointerDown(ev) {
+    if (ev.button === 2) {                // 右鍵：轉視角
+      lookSync();
+      LOOK.on = true; LOOK.pid = ev.pointerId;
+      LOOK.x = ev.clientX; LOOK.y = ev.clientY;
+      hoverBox.visible = false; S.hover = null; updateHud();
+      grab(ev);
+      return;
+    }
+    if (ev.button !== 0) return;          // 中鍵留給 OrbitControls 平移
+    DRAG.on = true; DRAG.pid = ev.pointerId; DRAG.moved = false;
+    DRAG.anchor = DRAG.cur = pick(ev);
+    grab(ev);
+  }
+
+  function onPointerMove(ev) {
+    if (LOOK.on && ev.pointerId === LOOK.pid) { lookStep(ev); return; }
+
+    var now = performance.now();
+    if (now - moveTick < 40) return;      // raycast 不必每個事件都做
+    moveTick = now;
+
+    if (DRAG.on && ev.pointerId === DRAG.pid) {
+      if (!DRAG.anchor) return;           // 從空白處開始拖曳：沒有起點就不框選
+      var hit = pick(ev);
+      if (!hit || hit.ri !== DRAG.anchor.ri) return;   // 跨區域不框選
+      DRAG.cur = hit;
+      hoverAt(hit);
+      if (hit.i !== DRAG.anchor.i || hit.j !== DRAG.anchor.j || hit.k !== DRAG.anchor.k) {
+        DRAG.moved = true;
+      }
+      if (DRAG.moved) {
+        showRangeBox(rangeOf(DRAG.anchor, DRAG.cur),
+          S.mode === "edit" ? 0xffa23f : 0x5ad1ff);
+      }
+      return;
+    }
+    hoverAt(pick(ev));
+  }
+
+  function onPointerUp(ev) {
+    if (LOOK.on && ev.pointerId === LOOK.pid) {
+      LOOK.on = false; LOOK.pid = -1; drop(ev); return;
+    }
+    if (!DRAG.on || ev.pointerId !== DRAG.pid) return;
+    DRAG.on = false; drop(ev);
+    var a = DRAG.anchor, b = DRAG.cur;
+    DRAG.anchor = DRAG.cur = null;
+    if (!a || ev.type === "pointercancel") { if (!S.range) showRangeBox(null); return; }
+    if (DRAG.moved && b && b.ri === a.ri) applyRange(rangeOf(a, b), ev);
+    else { if (!S.range) showRangeBox(null); applyClick(a, ev); }
   }
 
   function flyStep(dt) {
@@ -433,6 +494,8 @@
   function adoptDoc(doc, resetView) {
     S.doc = doc;
     S.sel = null;
+    S.range = null;
+    if (rangeBox) rangeBox.visible = false;
     S.regions = doc.regions.map(function (r) {
       return {
         name: r.name, min: r.min, size: r.size,
@@ -483,7 +546,8 @@
   }
 
   // ------------------------------------------------------------- 選取
-  function selMatch(r, ri, p) {
+  function selMatch(r, ri, p, i, j, k) {
+    if (S.range) return inRange(S.range, ri, i, j, k);
     if (!S.sel) return false;
     if (S.sel.state) return S.sel.state.ri === ri && S.sel.state.index === p;
     return r.palette[p].id === S.sel.id;
@@ -523,6 +587,8 @@
 
   function select(id, state) {
     S.sel = { id: id, state: state || null };
+    S.range = null;
+    showRangeBox(null);
     renderPalette();
     showSel();
     rebuild();
@@ -530,19 +596,23 @@
 
   function clearSel() {
     S.sel = null;
+    S.range = null;
+    showRangeBox(null);
     renderPalette();
     showSel();
     rebuild();
   }
 
   function showSel() {
+    if (S.range) { showRange(); return; }
     var ok = !!S.sel;
     ["newBlock", "btnApply", "btnAir", "stateSel"].forEach(function (id) {
       $(id).disabled = !ok;
     });
     var sel = $("stateSel");
     if (!ok) {
-      $("selInfo").textContent = "在右上清單或 3D 畫面中選一個方塊";
+      $("selInfo").textContent =
+        "在右上清單或 3D 畫面中選一個方塊，或在畫面上拖曳框選一塊範圍";
       sel.innerHTML = "";
       $("newBlock").value = "";
       return;
@@ -586,8 +656,54 @@
     syncNewBlock();
   }
 
+  // 框選範圍時的「替換」面板
+  function showRange() {
+    var rg = S.range, r = S.regions[rg.ri];
+    ["newBlock", "btnApply", "btnAir", "stateSel"].forEach(function (id) {
+      $(id).disabled = false;
+    });
+    var s = rangeSize(rg), cells = rangeCells(rg), c = rangeContents(rg);
+
+    $("selInfo").innerHTML = "";
+    var line1 = document.createElement("b");
+    line1.textContent = "選取範圍 " + s[0] + " × " + s[1] + " × " + s[2];
+    var line2 = document.createElement("div");
+    line2.className = "hint";
+    line2.textContent =
+      num(cells) + " 格・其中 " + num(cells - c.empty) + " 格有方塊　" +
+      (r.min[0] + rg.lo[0]) + "," + (r.min[1] + rg.lo[1]) + "," + (r.min[2] + rg.lo[2]) +
+      " ～ " +
+      (r.min[0] + rg.hi[0]) + "," + (r.min[1] + rg.hi[1]) + "," + (r.min[2] + rg.hi[2]) +
+      (S.regions.length > 1 ? "　區域 " + r.name : "");
+    $("selInfo").appendChild(line1);
+    $("selInfo").appendChild(line2);
+
+    var sel = $("stateSel");
+    sel.innerHTML = "";
+    var optAll = document.createElement("option");
+    optAll.value = "*";
+    optAll.textContent = "整個範圍（" + num(cells) + " 格，含空氣）";
+    sel.appendChild(optAll);
+    c.kinds.forEach(function (g) {
+      var o = document.createElement("option");
+      o.value = "id:" + g.id;
+      o.textContent = Blocks.nameOf(g.id) + "（" + num(g.count) + " 格）";
+      o.title = g.id;
+      sel.appendChild(o);
+    });
+    sel.value = "*";
+    syncNewBlock();
+  }
+
   // 「換成」欄位的預設值跟著下拉走
   function syncNewBlock() {
+    if (S.range) {
+      var rv = $("stateSel").value;
+      if (rv.indexOf("id:") === 0) { $("newBlock").value = rv.slice(3); return; }
+      var kinds = rangeContents(S.range).kinds;
+      $("newBlock").value = kinds.length ? kinds[0].id : "minecraft:stone";
+      return;
+    }
     if (!S.sel) return;
     var v = $("stateSel").value;
     if (v === "*") {
@@ -660,8 +776,8 @@
   }
 
   function buildTextured() {
-    var ghostOn = $("chkGhost").checked && !!S.sel;
-    var onlySel = $("chkOnlySel").checked && !!S.sel;
+    var ghostOn = $("chkGhost").checked && !!(S.sel || S.range);
+    var onlySel = $("chkOnlySel").checked && !!(S.sel || S.range);
     var cull = $("chkCull").checked;
     var counts = { op: 0, cut: 0, tr: 0, ghost: 0 };
     var blocks = 0, overflow = false, totalQuads = 0;
@@ -670,7 +786,7 @@
       visitBlocks(function (r, ri, i, j, k, p, wx, wy, wz) {
         var quads = r.models && r.models[p];
         if (!quads || !quads.length) return;          // 沒模型的交給色塊
-        var isSel = selMatch(r, ri, p);
+        var isSel = selMatch(r, ri, p, i, j, k);
         if (onlySel && !isSel) return;
         var ghost = ghostOn && !isSel;
         var any = false;
@@ -765,8 +881,8 @@
 
   // 沒有模型的方塊（箱子、告示牌…）或色塊模式：用近似外形的彩色方塊
   function buildColored(onlyFallback) {
-    var ghostOn = $("chkGhost").checked && !!S.sel;
-    var onlySel = $("chkOnlySel").checked && !!S.sel;
+    var ghostOn = $("chkGhost").checked && !!(S.sel || S.range);
+    var onlySel = $("chkOnlySel").checked && !!(S.sel || S.range);
     var cull = $("chkCull").checked;
     var buckets = {};
     var count = 0;
@@ -777,7 +893,7 @@
         if (qs && qs.length) return;                 // 已經用材質畫過了
       }
       var inf = r.info[p];
-      var isSel = selMatch(r, ri, p);
+      var isSel = selMatch(r, ri, p, i, j, k);
       if (onlySel && !isSel) return;
       if (!onlyFallback && !isSel && cull && inf.solid && occluded(r, i, j, k)) return;
       var key, alpha, color;
@@ -901,12 +1017,7 @@
   }
 
   var moveTick = 0;
-  function onMove(ev) {
-    if (LOOK.on) return;                  // 轉視角時不必一直 raycast
-    var now = performance.now();
-    if (now - moveTick < 40) return;
-    moveTick = now;
-    var hit = pick(ev);
+  function hoverAt(hit) {
     S.hover = hit;
     if (hit) {
       var r = S.regions[hit.ri];
@@ -932,9 +1043,7 @@
       (S.regions.length > 1 ? "　區域 " + r.name : "");
   }
 
-  function onClick(ev) {
-    var hit = pick(ev);
-    if (!hit) return;
+  function applyClick(hit, ev) {
     var r = S.regions[hit.ri];
     if (S.mode === "edit") {
       if (ev.shiftKey) {
@@ -950,6 +1059,101 @@
       return;
     }
     select(r.palette[hit.p].id, { ri: hit.ri, index: hit.p });
+  }
+
+  // ------------------------------------------------------------- 範圍
+  function rangeOf(a, b) {
+    return {
+      ri: a.ri,
+      lo: [Math.min(a.i, b.i), Math.min(a.j, b.j), Math.min(a.k, b.k)],
+      hi: [Math.max(a.i, b.i), Math.max(a.j, b.j), Math.max(a.k, b.k)]
+    };
+  }
+
+  function rangeSize(rg) {
+    return [rg.hi[0] - rg.lo[0] + 1, rg.hi[1] - rg.lo[1] + 1, rg.hi[2] - rg.lo[2] + 1];
+  }
+
+  function rangeCells(rg) {
+    var s = rangeSize(rg);
+    return s[0] * s[1] * s[2];
+  }
+
+  // 範圍裡每種方塊各幾格。idx 本機就有，不用問伺服器
+  function rangeContents(rg) {
+    var r = S.regions[rg.ri];
+    var HL = r.size[1] * r.size[2], L = r.size[2];
+    var map = {}, order = [], empty = 0;
+    for (var i = rg.lo[0]; i <= rg.hi[0]; i++) {
+      for (var j = rg.lo[1]; j <= rg.hi[1]; j++) {
+        var base = i * HL + j * L;
+        for (var k = rg.lo[2]; k <= rg.hi[2]; k++) {
+          var e = r.palette[r.idx[base + k]];
+          if (Blocks.isEmpty(e.id)) { empty++; continue; }
+          var g = map[e.id];
+          if (!g) { g = map[e.id] = { id: e.id, count: 0 }; order.push(g); }
+          g.count++;
+        }
+      }
+    }
+    order.sort(function (a, b) { return b.count - a.count; });
+    return { kinds: order, empty: empty };
+  }
+
+  function inRange(rg, ri, i, j, k) {
+    return ri === rg.ri &&
+      i >= rg.lo[0] && i <= rg.hi[0] &&
+      j >= rg.lo[1] && j <= rg.hi[1] &&
+      k >= rg.lo[2] && k <= rg.hi[2];
+  }
+
+  function showRangeBox(rg, color) {
+    if (!rg) { rangeBox.visible = false; return; }
+    var r = S.regions[rg.ri], s = rangeSize(rg);
+    rangeBox.scale.set(s[0] + 0.04, s[1] + 0.04, s[2] + 0.04);
+    rangeBox.position.set(
+      r.min[0] + rg.lo[0] + s[0] / 2,
+      r.min[1] + rg.lo[1] + s[1] / 2,
+      r.min[2] + rg.lo[2] + s[2] / 2);
+    rangeBox.material.color.setHex(color || 0x5ad1ff);
+    rangeBox.visible = true;
+  }
+
+  function setRange(rg) {
+    S.range = rg;
+    if (rg) S.sel = null;
+    showRangeBox(rg, 0x5ad1ff);
+    renderPalette();
+    showSel();
+    rebuild();
+  }
+
+  // 拖曳結束：瀏覽模式是框選，單格編輯模式是整塊填滿
+  function applyRange(rg, ev) {
+    if (S.mode !== "edit") { setRange(rg); return; }
+    var to = (ev.ctrlKey || ev.metaKey) ? "minecraft:air" : $("brush").value.trim();
+    if (!to) { msg("筆刷是空的", "bad"); showRangeBox(null); return; }
+    showRangeBox(rg, 0xffa23f);
+    var done = function () { if (!S.range) showRangeBox(null); };
+    doOp({
+      op: "fill_box", region: S.regions[rg.ri].name,
+      from: rg.lo, to_pos: rg.hi, to: to
+    }, function (res) { patchBox(rg, res.index, null); }).then(done, done);
+  }
+
+  // 伺服器改完之後，本機的 idx 也要跟著改，不然畫面跟檔案會不一致
+  function patchBox(rg, index, only) {
+    var r = S.regions[rg.ri];
+    var HL = r.size[1] * r.size[2], L = r.size[2];
+    for (var i = rg.lo[0]; i <= rg.hi[0]; i++) {
+      for (var j = rg.lo[1]; j <= rg.hi[1]; j++) {
+        var base = i * HL + j * L;
+        for (var k = rg.lo[2]; k <= rg.hi[2]; k++) {
+          if (only && r.palette[r.idx[base + k]].id !== only) continue;
+          r.idx[base + k] = index;
+        }
+      }
+    }
   }
 
   // ------------------------------------------------------------- 清單
@@ -1012,7 +1216,9 @@
   }
 
   function applyReplace(to) {
-    if (!S.sel || !to) return;
+    if (!to) return;
+    if (S.range) { replaceInRange(to); return; }
+    if (!S.sel) return;
     var v = $("stateSel").value;
     var newId = to.split("[")[0];
     if (newId.indexOf(":") < 0) newId = "minecraft:" + newId;
@@ -1037,6 +1243,17 @@
         to: to
       }).then(done, function () {});
     }
+  }
+
+  // 只動框選範圍裡的方塊：整個範圍填滿，或只換掉其中某一種方塊
+  function replaceInRange(to) {
+    var rg = S.range, v = $("stateSel").value;
+    var only = v.indexOf("id:") === 0 ? v.slice(3) : null;
+    doOp({
+      op: "fill_box", region: S.regions[rg.ri].name,
+      from: rg.lo, to_pos: rg.hi, to: to, only: only
+    }, function (res) { patchBox(rg, res.index, only); })
+      .then(function () { showSel(); }, function () {});
   }
 
   function save() {
@@ -1125,7 +1342,7 @@
         $("yMin").value = S.yFloor; $("yMax").value = S.yCeil; rebuild(); break;
       case "KeyQ": setMode("view"); break;
       case "KeyE": setMode("edit"); break;
-      case "Delete": if (S.sel) applyReplace("minecraft:air"); break;
+      case "Delete": if (S.sel || S.range) applyReplace("minecraft:air"); break;
       case "Slash": e.preventDefault(); toggleHelp(); break;
       case "Escape":
         if (!$("helpModal").classList.contains("hidden")) toggleHelp(false);
@@ -1151,6 +1368,7 @@
     };
 
     $("stateSel").onchange = function () {
+      if (S.range) { syncNewBlock(); return; }
       if (!S.sel) return;
       var v = this.value;
       S.sel.state = v === "*" ? null

@@ -494,34 +494,43 @@ def op_setblock(doc, body):
 
 
 def op_fill_box(doc, body):
-    """用 store 座標填一個長方體"""
+    """用 store 座標填一個長方體。only 可以限定只換掉其中某個 ID 或某個狀態"""
     region = doc.region(body["region"])
     blocks = region_blocks(region)
     a = [int(v) for v in body["from"]]
     b = [int(v) for v in body["to_pos"]]
     lo = [max(0, min(a[n], b[n])) for n in range(3)]
     hi = [min(blocks.shape[n] - 1, max(a[n], b[n])) for n in range(3)]
+    if any(hi[n] < lo[n] for n in range(3)):
+        raise ValueError("範圍不在這個區域裡")
     new_state = parse_blockstate(body["to"])
     idx = palette_index_of(region, new_state)
     sub = (slice(lo[0], hi[0] + 1), slice(lo[1], hi[1] + 1), slice(lo[2], hi[2] + 1))
+
+    mask = np.zeros(blocks.shape, dtype=bool)
     only = body.get("only")
     if only not in (None, "", "*"):
-        only_idx = None
-        for n, s in enumerate(region_palette(region)):
-            if state_text(s) == only or s.id == only:
-                only_idx = n
-                break
-        if only_idx is None:
+        # 有中括號就是指定到某一個狀態，沒有就是這個 ID 的全部狀態
+        exact = "[" in only
+        want_id = parse_blockstate(only).id
+        hits = []
+        for n, st in enumerate(region_palette(region)):
+            if (state_text(st) == only) if exact else (st.id == want_id):
+                hits.append(n)
+        if not hits:
             raise ValueError("找不到要被取代的方塊: %s" % only)
-        view = blocks[sub]
-        mask = view == only_idx
-        count = int(mask.sum())
-        view[mask] = idx
+        mask[sub] = np.isin(blocks[sub], hits)
     else:
-        count = int(blocks[sub].size)
-        blocks[sub] = idx
+        mask[sub] = True
+    mask &= blocks != idx            # 已經是目標方塊的格子不必動
+    count = int(mask.sum())
+
+    dropped = 0
+    if count and region.tile_entities:
+        dropped = drop_tile_entities(region, mask)
+    blocks[mask] = idx
     doc.dirty = True
-    return {"index": int(idx), "filled": count}
+    return {"index": int(idx), "filled": count, "dropped_tile_entities": dropped}
 
 
 OPS = {

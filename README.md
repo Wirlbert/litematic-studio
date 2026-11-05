@@ -29,8 +29,8 @@ Everything runs on `127.0.0.1`. Your schematics are never uploaded anywhere.
 - **Fly around with `W` `A` `S` `D`, `Space` and `Shift`**, hold `Ctrl` to go three times
   faster. The camera is a flight camera, not an orbit camera: **right-drag turns your own
   view** (it does not spin the schematic), the wheel moves you along your line of sight,
-  middle-drag pans, and the **left button does nothing but select blocks**. Press `?` for
-  the full shortcut list.
+  middle-drag pans, and the **left button does nothing but select**: click a block to select
+  its kind, drag to box-select a cuboid. Press `?` for the full shortcut list.
 - A plain coloured-box mode for when you want speed over fidelity on huge builds.
 
 **Edit**
@@ -38,10 +38,15 @@ Everything runs on `127.0.0.1`. Your schematics are never uploaded anywhere.
 - Pick a block, then choose from a dropdown whether to replace **all of its states at once**
   or just **one specific state** — all the trapdoors, or only the ones facing west.
   State properties are carried over to the new block where it actually has them.
-- Delete blocks (replace with air).
+- **Drag with the left button to box-select a cuboid**, from the block you press on to the
+  block you release on. The panel then shows what is inside it, and the dropdown picks
+  either the whole box (air included) or one kind of block in it; replacing or deleting
+  touches nothing outside the box.
+- Delete blocks (replace with air), by kind or inside a box.
 - Single-block edit mode: put a block in the **brush** field, switch to 單格編輯, then left
-  click a block in the 3D view to turn it into the brush block. Shift+click picks the block
-  under the cursor into the brush, Ctrl+click deletes to air.
+  click a block in the 3D view to turn it into the brush block — or drag to fill a whole
+  cuboid with it. Shift+click picks the block under the cursor into the brush, Ctrl+click
+  (or Ctrl+drag) deletes to air.
 - `Ctrl+S` saves. Every save copies the previous file into `backups/` first, and you can
   restore any backup from the UI.
 
@@ -187,16 +192,20 @@ runtime from the copy of the game you already have. Not affiliated with Mojang S
 - 右欄清單就是材料表，一種方塊一列並標出有幾種狀態，點一下就在 3D 中高亮。
 - **用 `W` `A` `S` `D`、`空白`、`Shift` 飛行移動**，按住 `Ctrl` 加速三倍。
   視角是飛行視角不是環繞視角：**右鍵拖曳是轉自己的頭**（不會把藍圖轉來轉去）、
-  滾輪沿著視線前進後退、中鍵拖曳平移，**左鍵只負責選取方塊**。按 `?` 看完整快捷鍵。
+  滾輪沿著視線前進後退、中鍵拖曳平移，**左鍵只負責選取**：點一下選那種方塊，
+  拖曳則框出一塊長方體範圍。按 `?` 看完整快捷鍵。
 - 另有純色塊模式，超大型建築要速度時用。
 
 **改**
 
 - 選一個方塊之後，用下拉選單決定要換掉**全部狀態**還是**其中某一個狀態**
   ——整張圖的地板門全換，或只換朝西的那批。狀態屬性會在新方塊真的有那個屬性時保留。
-- 刪成空氣。
+- **左鍵拖曳框選一塊長方體**，從按下去的那一格到放開的那一格。面板會列出範圍裡有什麼，
+  下拉選單可以選整個範圍（含空氣）或範圍裡的某一種方塊，替換與刪除都只動範圍內的格子。
+- 刪成空氣，可以整種刪，也可以只刪一塊範圍裡的。
 - 單格編輯模式：先在「筆刷」欄填一個方塊，切到單格編輯，然後在 3D 畫面左鍵點一格，
-  那一格就變成筆刷方塊。Shift+左鍵可以把游標下的方塊吸過來當筆刷，Ctrl+左鍵刪成空氣。
+  那一格就變成筆刷方塊；左鍵拖曳則是一次填滿一整塊長方體。Shift+左鍵可以把游標下的
+  方塊吸過來當筆刷，Ctrl+左鍵（或 Ctrl+拖曳）刪成空氣。
 - `Ctrl+S` 儲存，每次存檔前先把舊檔複製到 `backups/`，可以從介面還原任何一份備份。
 
 ## 需求
