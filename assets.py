@@ -393,6 +393,100 @@ class Assets:
         return out
 
 
+
+# ----------------------------------------------------------------- 語言檔
+
+LANG_PREFER = ("zh_tw", "zh_hk", "zh_cn")
+
+
+def _find_assets_root(start):
+    """往上找啟動器的 assets 資料夾（裡面要有 indexes/）"""
+    start = Path(start).resolve()
+    for up in [start] + list(start.parents)[:7]:
+        cand = up / "assets"
+        if (cand / "indexes").is_dir():
+            return cand
+        if (up / "indexes").is_dir() and (up / "objects").is_dir():
+            return up
+    return None
+
+
+def _index_id_for_jar(jar_path):
+    """從 versions/<ver>/<ver>.json 讀出 assetIndex 的 id"""
+    jar = Path(jar_path)
+    vj = jar.with_suffix(".json")
+    if not vj.exists():
+        return None
+    try:
+        d = json.loads(vj.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    ai = d.get("assetIndex") or {}
+    return str(ai.get("id") or d.get("assets") or "") or None
+
+
+def load_block_names(jar_path, zip_obj=None, prefer=LANG_PREFER):
+    """
+    讀出中文方塊名。回傳 (names, lang, source)：
+    names 是 {方塊短 id: 譯名}，找不到時是 {}。
+
+    原版 jar 裡只有 en_us，其他語言放在啟動器的 assets/objects 內容定址儲存區，
+    要透過 assets/indexes/<id>.json 查雜湊才找得到。
+    """
+    # 1) jar 內（資源包或某些整合包會直接塞進去）
+    if zip_obj is not None:
+        for lang in prefer:
+            name = "assets/minecraft/lang/%s.json" % lang
+            try:
+                raw = zip_obj.read(name)
+            except KeyError:
+                continue
+            try:
+                return _blocks_from_lang(json.loads(raw.decode("utf-8"))), lang, "jar"
+            except Exception:
+                pass
+
+    # 2) 啟動器的 assets 儲存區
+    root = _find_assets_root(Path(jar_path).parent)
+    if root is None:
+        return {}, None, None
+
+    wanted = _index_id_for_jar(jar_path)
+    indexes = sorted((root / "indexes").glob("*.json"))
+    if wanted:
+        indexes.sort(key=lambda p: (p.stem != wanted,))
+
+    for ip in indexes:
+        try:
+            objects = json.loads(ip.read_text(encoding="utf-8")).get("objects", {})
+        except Exception:
+            continue
+        for lang in prefer:
+            entry = objects.get("minecraft/lang/%s.json" % lang)
+            if not entry:
+                continue
+            h = entry.get("hash", "")
+            blob = root / "objects" / h[:2] / h
+            if not blob.exists():
+                continue
+            try:
+                data = json.loads(blob.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            return _blocks_from_lang(data), lang, str(ip)
+    return {}, None, None
+
+
+def _blocks_from_lang(data):
+    pre = "block.minecraft."
+    out = {}
+    for k, v in data.items():
+        if k.startswith(pre) and isinstance(v, str):
+            short = k[len(pre):]
+            if "." not in short:          # 跳過 block.minecraft.x.y 這類子鍵
+                out[short] = v
+    return out
+
 # ----------------------------------------------------------------- jar 搜尋
 
 def find_client_jar(start_dir):

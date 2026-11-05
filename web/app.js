@@ -8,14 +8,14 @@
   var S = {
     root: "", files: [], file: null, doc: null,
     regions: [],          // {name, min, size, palette, idx, info, models, full}
-    sel: null,            // {ri, index}
-    tab: "states",
+    sel: null,            // {id, state: null | {ri, index}}
     mode: "view",
     textured: true,
     yLo: 0, yHi: 0, yFloor: 0, yCeil: 0,
     hover: null,
     atlas: null, atlasCols: 1, atlasRows: 1, texSlot: {}, texInfo: [],
-    jar: null
+    jar: null, lang: null,
+    moveSpeed: 14
   };
 
   var TEXIMG = {};   // 已解碼的材質圖：name -> HTMLImageElement
@@ -45,11 +45,15 @@
     }, 6000);
   }
 
+  function num(n) { return n.toLocaleString(); }
+
   // ------------------------------------------------------------- three.js
   var renderer, scene, camera, controls, hoverBox, boxGroup;
   var meshes = [];
   var raycaster = new THREE.Raycaster();
   var dummy = new THREE.Object3D();
+  var KEYS = {};
+  var lastFrame = 0;
 
   function initThree() {
     var host = $("view");
@@ -87,9 +91,11 @@
     window.addEventListener("resize", onResize);
     renderer.domElement.addEventListener("mousemove", onMove);
     renderer.domElement.addEventListener("click", onClick);
+    renderer.domElement.addEventListener("contextmenu", function (e) { e.preventDefault(); });
     renderer.domElement.addEventListener("mouseleave", function () {
       hoverBox.visible = false; S.hover = null; updateHud();
     });
+    lastFrame = performance.now();
     animate();
   }
 
@@ -101,8 +107,41 @@
     renderer.setSize(host.clientWidth, host.clientHeight);
   }
 
+  // WASD / 空白 / Shift 飛行移動：同時平移相機與軌道中心，才不會把視角轉掉
+  var vF = new THREE.Vector3(), vD = new THREE.Vector3();
+
+  function flyStep(dt) {
+    var f = (KEYS.KeyW ? 1 : 0) - (KEYS.KeyS ? 1 : 0);
+    var r = (KEYS.KeyD ? 1 : 0) - (KEYS.KeyA ? 1 : 0);
+    var u = (KEYS.Space ? 1 : 0) - ((KEYS.ShiftLeft || KEYS.ShiftRight) ? 1 : 0);
+    if (!f && !r && !u) return;
+
+    camera.getWorldDirection(vF);
+    vF.y = 0;
+    if (vF.lengthSq() < 1e-8) {           // 正上方或正下方俯視時改用相機的上方向
+      vF.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      vF.y = 0;
+      if (vF.lengthSq() < 1e-8) vF.set(0, 0, -1);
+    }
+    vF.normalize();
+
+    var sp = S.moveSpeed * ((KEYS.ControlLeft || KEYS.ControlRight) ? 3 : 1) * dt;
+    vD.set(0, 0, 0);
+    vD.addScaledVector(vF, f * sp);
+    vD.x += -vF.z * r * sp;               // 右向量 = forward × up = (-fz, 0, fx)
+    vD.z += vF.x * r * sp;
+    vD.y += u * sp;
+
+    camera.position.add(vD);
+    controls.target.add(vD);
+  }
+
   function animate() {
     requestAnimationFrame(animate);
+    var now = performance.now();
+    var dt = Math.min(0.08, (now - lastFrame) / 1000);
+    lastFrame = now;
+    flyStep(dt);
     controls.update();
     renderer.render(scene, camera);
   }
@@ -346,11 +385,14 @@
     $("yMin").max = $("yMax").max = hi;
     $("yMin").value = lo; $("yMax").value = hi;
 
+    var span = Math.max(doc.size[0], doc.size[1], doc.size[2]);
+    S.moveSpeed = Math.max(8, Math.min(60, span / 3));
+
     $("hdrFile").textContent = doc.file + "  —  " + doc.size.join(" × ") +
       (doc.author ? "  by " + doc.author : "");
     $("info").textContent =
       "尺寸  " + doc.size.join(" × ") + "\n" +
-      "體積  " + doc.volume.toLocaleString() + " 格\n" +
+      "體積  " + num(doc.volume) + " 格\n" +
       "區域  " + doc.regions.length + "\n" +
       "容器  " + S.regions.reduce(function (a, r) { return a + r.tileEntities; }, 0) +
       "   實體 " + S.regions.reduce(function (a, r) { return a + r.entities; }, 0) +
@@ -371,6 +413,124 @@
   function setDirty(d) {
     if (S.doc) S.doc.dirty = d;
     $("dirty").classList.toggle("hidden", !d);
+  }
+
+  // ------------------------------------------------------------- 選取
+  function selMatch(r, ri, p) {
+    if (!S.sel) return false;
+    if (S.sel.state) return S.sel.state.ri === ri && S.sel.state.index === p;
+    return r.palette[p].id === S.sel.id;
+  }
+
+  // 一個方塊 ID 底下的所有狀態
+  function statesOf(id) {
+    var out = [];
+    S.regions.forEach(function (r, ri) {
+      r.palette.forEach(function (e, i) {
+        if (e.id === id && e.count > 0) {
+          out.push({ ri: ri, index: i, text: e.text, count: e.count });
+        }
+      });
+    });
+    out.sort(function (a, b) { return b.count - a.count; });
+    return out;
+  }
+
+  function blockGroups() {
+    var map = {}, order = [];
+    S.regions.forEach(function (r, ri) {
+      r.palette.forEach(function (e, i) {
+        if (Blocks.isEmpty(e.id) || !e.count) return;
+        var g = map[e.id];
+        if (!g) {
+          g = map[e.id] = { id: e.id, count: 0, states: 0, hex: r.info[i].hex };
+          order.push(g);
+        }
+        g.count += e.count;
+        g.states++;
+      });
+    });
+    order.sort(function (a, b) { return b.count - a.count; });
+    return order;
+  }
+
+  function select(id, state) {
+    S.sel = { id: id, state: state || null };
+    renderPalette();
+    showSel();
+    rebuild();
+  }
+
+  function clearSel() {
+    S.sel = null;
+    renderPalette();
+    showSel();
+    rebuild();
+  }
+
+  function showSel() {
+    var ok = !!S.sel;
+    ["newBlock", "btnApply", "btnAir", "stateSel"].forEach(function (id) {
+      $(id).disabled = !ok;
+    });
+    var sel = $("stateSel");
+    if (!ok) {
+      $("selInfo").textContent = "在右上清單或 3D 畫面中選一個方塊";
+      sel.innerHTML = "";
+      $("newBlock").value = "";
+      return;
+    }
+
+    var states = statesOf(S.sel.id);
+    var total = states.reduce(function (a, s) { return a + s.count; }, 0);
+    $("selInfo").innerHTML = "";
+    var line1 = document.createElement("b");
+    line1.textContent = Blocks.nameOf(S.sel.id);
+    var line2 = document.createElement("div");
+    line2.className = "hint";
+    line2.textContent = S.sel.id + "　共 " + num(total) + " 格" +
+      (states.length > 1 ? "　" + states.length + " 種狀態" : "");
+    $("selInfo").appendChild(line1);
+    $("selInfo").appendChild(line2);
+
+    // 下拉：全部狀態 + 各別狀態
+    sel.innerHTML = "";
+    var optAll = document.createElement("option");
+    optAll.value = "*";
+    optAll.textContent = "全部狀態（" + num(total) + " 格" +
+      (states.length > 1 ? "・" + states.length + " 種" : "") + "）";
+    sel.appendChild(optAll);
+    if (states.length > 1) {
+      states.forEach(function (st) {
+        var o = document.createElement("option");
+        o.value = st.ri + ":" + st.index;
+        o.textContent = (Blocks.stateLabel(st.text) || "（無狀態）") +
+          "（" + num(st.count) + " 格）";
+        o.title = st.text;
+        sel.appendChild(o);
+      });
+    }
+
+    var want = S.sel.state ? (S.sel.state.ri + ":" + S.sel.state.index) : "*";
+    sel.value = want;
+    if (sel.value !== want) sel.value = "*";
+    // 一定要重算「換成」的預設值：選了別的方塊卻留著上一個的值，
+    // 按下套用就會換成完全不相干的東西。
+    syncNewBlock();
+  }
+
+  // 「換成」欄位的預設值跟著下拉走
+  function syncNewBlock() {
+    if (!S.sel) return;
+    var v = $("stateSel").value;
+    if (v === "*") {
+      $("newBlock").value = S.sel.id;
+    } else {
+      var parts = v.split(":");
+      var r = S.regions[+parts[0]];
+      var e = r && r.palette[+parts[1]];
+      $("newBlock").value = e ? e.text : S.sel.id;
+    }
   }
 
   // ------------------------------------------------------------- 走訪
@@ -426,8 +586,8 @@
     var stats = useTex ? buildTextured() : { quads: 0, blocks: 0 };
     var extra = buildColored(useTex);
     $("counts").textContent = (useTex ? "材質模式　" : "色塊模式　") +
-      (stats.quads ? stats.quads.toLocaleString() + " 面　" : "") +
-      "方塊 " + ((stats.blocks || 0) + extra).toLocaleString() +
+      (stats.quads ? num(stats.quads) + " 面　" : "") +
+      "方塊 " + num((stats.blocks || 0) + extra) +
       (stats.overflow ? "　（已達上限，請縮小 Y 層範圍）" : "");
     $("yLabel").textContent = S.yLo + " … " + S.yHi;
   }
@@ -443,7 +603,7 @@
       visitBlocks(function (r, ri, i, j, k, p, wx, wy, wz) {
         var quads = r.models && r.models[p];
         if (!quads || !quads.length) return;          // 沒模型的交給色塊
-        var isSel = S.sel && S.sel.ri === ri && S.sel.index === p;
+        var isSel = selMatch(r, ri, p);
         if (onlySel && !isSel) return;
         var ghost = ghostOn && !isSel;
         var any = false;
@@ -550,7 +710,7 @@
         if (qs && qs.length) return;                 // 已經用材質畫過了
       }
       var inf = r.info[p];
-      var isSel = S.sel && S.sel.ri === ri && S.sel.index === p;
+      var isSel = selMatch(r, ri, p);
       if (onlySel && !isSel) return;
       if (!onlyFallback && !isSel && cull && inf.solid && occluded(r, i, j, k)) return;
       var key, alpha, color;
@@ -695,9 +855,13 @@
     var h = S.hover;
     if (!h) { $("hud").textContent = ""; return; }
     var r = S.regions[h.ri];
-    $("hud").textContent = r.palette[h.p].text + "\n座標 " +
+    var e = r.palette[h.p];
+    var label = Blocks.stateLabel(e.text);
+    $("hud").textContent =
+      Blocks.nameOf(e.id) + (label ? "　" + label : "") + "\n" +
+      e.text + "\n座標 " +
       (r.min[0] + h.i) + ", " + (r.min[1] + h.j) + ", " + (r.min[2] + h.k) +
-      (S.regions.length > 1 ? "   區域 " + r.name : "");
+      (S.regions.length > 1 ? "　區域 " + r.name : "");
   }
 
   function onClick(ev) {
@@ -707,7 +871,7 @@
     if (S.mode === "edit") {
       if (ev.shiftKey) {
         $("brush").value = r.palette[hit.p].text;
-        msg("筆刷 = " + $("brush").value, "ok");
+        msg("筆刷 = " + Blocks.nameOf(r.palette[hit.p].id), "ok");
         return;
       }
       var to = ev.ctrlKey || ev.metaKey ? "minecraft:air" : $("brush").value.trim();
@@ -717,29 +881,7 @@
         });
       return;
     }
-    select(hit.ri, hit.p);
-  }
-
-  function select(ri, index) {
-    S.sel = { ri: ri, index: index };
-    renderPalette();
-    showSel();
-    rebuild();
-  }
-
-  function showSel() {
-    var ok = !!S.sel;
-    ["newBlock", "btnApply", "btnAir"].forEach(function (id) { $(id).disabled = !ok; });
-    if (!ok) {
-      $("selInfo").textContent = "先在清單或 3D 畫面中選一個方塊";
-      $("newBlock").value = "";
-      return;
-    }
-    var r = S.regions[S.sel.ri];
-    var e = r.palette[S.sel.index];
-    $("selInfo").textContent = e.text + "\n" + e.count.toLocaleString() + " 格" +
-      (S.regions.length > 1 ? "（區域 " + r.name + "）" : "");
-    $("newBlock").value = e.text;
+    select(r.palette[hit.p].id, { ri: hit.ri, index: hit.p });
   }
 
   // ------------------------------------------------------------- 清單
@@ -748,64 +890,33 @@
     var q = $("search").value.trim().toLowerCase();
     box.innerHTML = "";
 
-    if (S.tab === "ids") {
-      var agg = {};
-      S.regions.forEach(function (r) {
-        r.palette.forEach(function (e) {
-          if (Blocks.isEmpty(e.id) || !e.count) return;
-          agg[e.id] = (agg[e.id] || 0) + e.count;
-        });
-      });
-      Object.keys(agg).map(function (id) { return [id, agg[id]]; })
-        .sort(function (a, b) { return b[1] - a[1]; })
-        .forEach(function (row) {
-          if (q && row[0].indexOf(q) < 0) return;
-          var el = document.createElement("div");
-          el.className = "item";
-          el.innerHTML = '<div class="sw"></div><div class="nm"></div><div class="ct">' +
-            row[1].toLocaleString() + "</div>";
-          el.querySelector(".sw").style.background = Blocks.colorOf(row[0]);
-          el.querySelector(".nm").textContent = row[0].replace("minecraft:", "");
-          el.onclick = function () {
-            $("newBlock").value = row[0];
-            $("chkAllStates").checked = true;
-            for (var ri = 0; ri < S.regions.length; ri++) {
-              var pi = -1;
-              S.regions[ri].palette.forEach(function (e, n) {
-                if (pi < 0 && e.id === row[0] && e.count) pi = n;
-              });
-              if (pi >= 0) { select(ri, pi); break; }
-            }
-          };
-          box.appendChild(el);
-        });
-      return;
-    }
+    var groups = blockGroups();
+    $("blockSummary").textContent = groups.length + " 種方塊";
 
-    S.regions.forEach(function (r, ri) {
-      var rows = r.palette.map(function (e, i) { return { e: e, i: i }; })
-        .filter(function (x) { return x.e.count > 0 && !Blocks.isEmpty(x.e.id); })
-        .sort(function (a, b) { return b.e.count - a.e.count; });
-      if (S.regions.length > 1) {
-        var hdr = document.createElement("div");
-        hdr.className = "hint";
-        hdr.textContent = "區域 " + r.name;
-        box.appendChild(hdr);
-      }
-      rows.forEach(function (x) {
-        if (q && x.e.text.toLowerCase().indexOf(q) < 0) return;
-        var el = document.createElement("div");
-        var active = S.sel && S.sel.ri === ri && S.sel.index === x.i;
-        el.className = "item" + (active ? " active" : "");
-        el.innerHTML = '<div class="sw"></div><div class="nm"></div><div class="ct">' +
-          x.e.count.toLocaleString() + "</div>";
-        el.querySelector(".sw").style.background = r.info[x.i].hex;
-        el.querySelector(".nm").textContent = x.e.text.replace("minecraft:", "");
-        el.title = x.e.text;
-        el.onclick = function () { select(ri, x.i); };
-        box.appendChild(el);
-      });
+    var shown = 0;
+    groups.forEach(function (g) {
+      var name = Blocks.nameOf(g.id);
+      if (q && g.id.toLowerCase().indexOf(q) < 0 && name.toLowerCase().indexOf(q) < 0) return;
+      shown++;
+      var el = document.createElement("div");
+      var active = S.sel && S.sel.id === g.id;
+      el.className = "item" + (active ? " active" : "");
+      el.innerHTML =
+        '<div class="sw"></div>' +
+        '<div class="nm2"><b></b><small></small></div>' +
+        '<div class="ct">' + num(g.count) + "</div>";
+      el.querySelector(".sw").style.background = g.hex;
+      el.querySelector("b").textContent = name;
+      el.querySelector("small").textContent =
+        g.id.replace("minecraft:", "") + (g.states > 1 ? "　" + g.states + " 種狀態" : "");
+      el.title = g.id;
+      el.onclick = function () { select(g.id, null); };
+      box.appendChild(el);
     });
+
+    if (!shown) {
+      box.innerHTML = '<div class="hint">沒有符合的方塊</div>';
+    }
   }
 
   // ------------------------------------------------------------- 操作
@@ -833,13 +944,30 @@
   }
 
   function applyReplace(to) {
-    if (!S.sel) return;
-    var r = S.regions[S.sel.ri];
-    var cur = r.palette[S.sel.index];
-    if ($("chkAllStates").checked) {
-      doOp({ op: "replace_id", from_id: cur.id, to_id: to, keep_props: true });
+    if (!S.sel || !to) return;
+    var v = $("stateSel").value;
+    var newId = to.split("[")[0];
+    if (newId.indexOf(":") < 0) newId = "minecraft:" + newId;
+
+    var done = function () {
+      // 換完之後把選取移到新方塊上，不然選的是一個已經不存在的 ID
+      var still = statesOf(newId).length ? newId : null;
+      S.sel = still ? { id: still, state: null } : null;
+      renderPalette();
+      showSel();
+      rebuild();
+    };
+
+    if (v === "*") {
+      doOp({ op: "replace_id", from_id: S.sel.id, to_id: to, keep_props: true }).then(done, function () {});
     } else {
-      doOp({ op: "replace_state", region: r.name, index: S.sel.index, to: to });
+      var parts = v.split(":");
+      doOp({
+        op: "replace_state",
+        region: S.regions[+parts[0]].name,
+        index: +parts[1],
+        to: to
+      }).then(done, function () {});
     }
   }
 
@@ -852,6 +980,97 @@
     }).catch(function (e) { msg(String(e.message || e), "bad"); });
   }
 
+  function setMode(m) {
+    S.mode = m;
+    $("modeView").classList.toggle("active", m === "view");
+    $("modeEdit").classList.toggle("active", m === "edit");
+    $("editHint").classList.toggle("hidden", m !== "edit");
+    $("modeHint").classList.toggle("hidden", m === "edit");
+    $("brushPanel").classList.toggle("dim", m !== "edit");
+  }
+
+  function setY(which, v) {
+    v = Math.max(S.yFloor, Math.min(S.yCeil, v));
+    if (which === "lo") {
+      S.yLo = v;
+      if (S.yLo > S.yHi) { S.yHi = S.yLo; $("yMax").value = S.yHi; }
+      $("yMin").value = S.yLo;
+    } else {
+      S.yHi = v;
+      if (S.yHi < S.yLo) { S.yLo = S.yHi; $("yMin").value = S.yLo; }
+      $("yMax").value = S.yHi;
+    }
+    rebuild();
+  }
+
+  function toggleChk(id) {
+    var el = $(id);
+    el.checked = !el.checked;
+    if (el.onchange) el.onchange();
+  }
+
+  function toggleHelp(force) {
+    var m = $("helpModal");
+    var show = force === undefined ? m.classList.contains("hidden") : force;
+    m.classList.toggle("hidden", !show);
+  }
+
+  // ------------------------------------------------------------- 鍵盤
+  function typing() {
+    var ae = document.activeElement;
+    if (!ae) return false;
+    if (ae.tagName === "TEXTAREA" || ae.tagName === "SELECT") return true;
+    return ae.tagName === "INPUT" &&
+      /^(text|search|number|email|url|password)$/.test(ae.type);
+  }
+
+  function onKeyDown(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault(); save(); return;
+    }
+    if (typing()) return;
+
+    if (e.code === "Space" || e.code === "ShiftLeft" || e.code === "ShiftRight" ||
+        e.code === "ControlLeft" || e.code === "ControlRight" ||
+        e.code === "KeyW" || e.code === "KeyA" || e.code === "KeyS" || e.code === "KeyD") {
+      KEYS[e.code] = true;
+      if (e.code === "Space") e.preventDefault();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    switch (e.code) {
+      case "KeyF": fitCamera(); break;
+      case "Digit1": fitCamera(); break;
+      case "Digit2": fitCamera("top"); break;
+      case "Digit3": fitCamera("side"); break;
+      case "KeyX": toggleChk("chkTex"); break;
+      case "KeyG": toggleChk("chkGhost"); break;
+      case "KeyH": toggleChk("chkOnlySel"); break;
+      case "KeyC": toggleChk("chkCull"); break;
+      case "KeyB": toggleChk("chkBox"); break;
+      case "BracketLeft": setY("hi", S.yHi - 1); break;
+      case "BracketRight": setY("hi", S.yHi + 1); break;
+      case "Minus": setY("lo", S.yLo - 1); break;
+      case "Equal": setY("lo", S.yLo + 1); break;
+      case "KeyR": S.yLo = S.yFloor; S.yHi = S.yCeil;
+        $("yMin").value = S.yFloor; $("yMax").value = S.yCeil; rebuild(); break;
+      case "KeyQ": setMode("view"); break;
+      case "KeyE": setMode("edit"); break;
+      case "Delete": if (S.sel) applyReplace("minecraft:air"); break;
+      case "Slash": e.preventDefault(); toggleHelp(); break;
+      case "Escape":
+        if (!$("helpModal").classList.contains("hidden")) toggleHelp(false);
+        else if (!$("modal").classList.contains("hidden")) $("modal").classList.add("hidden");
+        else clearSel();
+        break;
+      default: break;
+    }
+  }
+
+  function onKeyUp(e) { delete KEYS[e.code]; }
+  function clearKeys() { KEYS = {}; }
+
   // ------------------------------------------------------------- 綁定
   function bind() {
     $("btnReloadFiles").onclick = loadFileList;
@@ -863,35 +1082,26 @@
       });
     };
 
-    $("btnApply").onclick = function () {
-      var to = $("newBlock").value.trim();
-      if (to) applyReplace(to);
+    $("stateSel").onchange = function () {
+      if (!S.sel) return;
+      var v = this.value;
+      S.sel.state = v === "*" ? null
+        : { ri: +v.split(":")[0], index: +v.split(":")[1] };
+      syncNewBlock();
+      renderPalette();
+      rebuild();
     };
+
+    $("btnApply").onclick = function () { applyReplace($("newBlock").value.trim()); };
     $("newBlock").onkeydown = function (e) {
       if (e.key === "Enter") { e.preventDefault(); $("btnApply").click(); }
     };
     $("btnAir").onclick = function () { applyReplace("minecraft:air"); };
 
     $("search").oninput = renderPalette;
-    $("tabStates").onclick = function () {
-      S.tab = "states"; this.classList.add("active");
-      $("tabIds").classList.remove("active"); renderPalette();
-    };
-    $("tabIds").onclick = function () {
-      S.tab = "ids"; this.classList.add("active");
-      $("tabStates").classList.remove("active"); renderPalette();
-    };
 
-    $("yMin").oninput = function () {
-      S.yLo = +this.value;
-      if (S.yLo > S.yHi) { S.yHi = S.yLo; $("yMax").value = S.yHi; }
-      rebuild();
-    };
-    $("yMax").oninput = function () {
-      S.yHi = +this.value;
-      if (S.yHi < S.yLo) { S.yLo = S.yHi; $("yMin").value = S.yLo; }
-      rebuild();
-    };
+    $("yMin").oninput = function () { setY("lo", +this.value); };
+    $("yMax").oninput = function () { setY("hi", +this.value); };
     ["chkGhost", "chkOnlySel", "chkCull"].forEach(function (id) {
       $(id).onchange = rebuild;
     });
@@ -902,14 +1112,12 @@
     $("btnTop").onclick = function () { fitCamera("top"); };
     $("btnSide").onclick = function () { fitCamera("side"); };
 
-    $("modeView").onclick = function () {
-      S.mode = "view"; this.classList.add("active");
-      $("modeEdit").classList.remove("active"); $("editHint").classList.add("hidden");
-    };
-    $("modeEdit").onclick = function () {
-      S.mode = "edit"; this.classList.add("active");
-      $("modeView").classList.remove("active"); $("editHint").classList.remove("hidden");
-    };
+    $("modeView").onclick = function () { setMode("view"); };
+    $("modeEdit").onclick = function () { setMode("edit"); };
+
+    $("btnHelp").onclick = function () { toggleHelp(); };
+    $("btnCloseHelp").onclick = function () { toggleHelp(false); };
+    $("helpModal").onclick = function (e) { if (e.target === this) toggleHelp(false); };
 
     $("btnBackups").onclick = function () {
       api("/api/backups?f=" + encodeURIComponent(S.file)).then(function (j) {
@@ -936,21 +1144,16 @@
     };
     $("btnCloseModal").onclick = function () { $("modal").classList.add("hidden"); };
 
-    document.addEventListener("keydown", function (e) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault(); save(); return;
-      }
-      var ae = document.activeElement;
-      if (ae && (ae.tagName === "TEXTAREA" ||
-          (ae.tagName === "INPUT" && /^(text|search|number|email|url)$/.test(ae.type)))) return;
-      if (e.key === "Escape") { S.sel = null; renderPalette(); showSel(); rebuild(); }
-      if (e.key === "[") { $("yMax").value = Math.max(S.yFloor, S.yHi - 1); $("yMax").oninput.call($("yMax")); }
-      if (e.key === "]") { $("yMax").value = Math.min(S.yCeil, S.yHi + 1); $("yMax").oninput.call($("yMax")); }
-    });
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearKeys);
 
     var dl = $("blockList");
     Blocks.SUGGEST.forEach(function (b) {
-      var o = document.createElement("option"); o.value = b; dl.appendChild(o);
+      var o = document.createElement("option");
+      o.value = b;
+      o.label = Blocks.nameOf(b);
+      dl.appendChild(o);
     });
 
     window.addEventListener("beforeunload", function (e) {
@@ -967,8 +1170,17 @@
   }
   initThree();
   bind();
+  setMode("view");
   showSel();
-  loadFileList().then(function () {
+
+  api("/api/lang").then(function (j) {
+    Blocks.setNames(j.blocks);
+    S.lang = j.lang;
+  }).catch(function () {
+    // 沒有語言檔就顯示英文 ID
+  }).then(function () {
+    return loadFileList();
+  }).then(function () {
     if (S.files.length) openFile(S.files[0].name);
   });
 })();

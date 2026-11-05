@@ -331,7 +331,7 @@ class Doc:
         }
 
 
-ASSETS = {"obj": None, "jar": None, "error": None}
+ASSETS = {"obj": None, "jar": None, "error": None, "names": {}, "lang": None}
 
 
 def bake_doc(doc, have=None):
@@ -610,6 +610,11 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/schem":
                 doc = self.store.get(q["f"][0], reload=q.get("reload", ["0"])[0] == "1")
                 return self.send_json(doc.to_json())
+            if u.path == "/api/lang":
+                return self.send_json({
+                    "lang": ASSETS["lang"],
+                    "blocks": ASSETS["names"],
+                })
             if u.path == "/api/assets":
                 return self.send_json({
                     "ok": ASSETS["obj"] is not None,
@@ -722,6 +727,13 @@ def main():
                 ASSETS["obj"] = mcassets.Assets(jar)
                 ASSETS["jar"] = jar
                 print("材質   :", jar)
+                names, lang, src = mcassets.load_block_names(jar, ASSETS["obj"].zip)
+                ASSETS["names"] = names
+                ASSETS["lang"] = lang
+                if names:
+                    print("方塊名 : %s（%d 筆）" % (lang, len(names)))
+                else:
+                    print("方塊名 : 找不到中文語言檔，清單會顯示英文 ID")
             except Exception as exc:
                 ASSETS["error"] = "jar 讀取失敗: %s" % exc
                 print("[!]", ASSETS["error"])

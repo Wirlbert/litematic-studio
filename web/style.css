@@ -133,3 +133,53 @@ main { flex: 1; position: relative; display: flex; flex-direction: column; min-w
   padding: 14px; width: 460px; max-height: 70vh; display: flex; flex-direction: column; }
 .modal-title { font-size: 13px; margin-bottom: 8px; }
 .hidden { display: none !important; }
+
+/* ---- 鍵盤提示 ---- */
+kbd {
+  display: inline-block; min-width: 15px; text-align: center;
+  padding: 0 4px; margin: 0 1px;
+  font: 10px/16px Consolas, monospace; color: var(--fg2);
+  background: #11141a; border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 3px;
+}
+button kbd { color: inherit; opacity: .65; background: rgba(0,0,0,.25); }
+
+/* ---- 狀態下拉 ---- */
+select {
+  width: 100%; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 5px;
+  padding: 5px 6px; font-family: Consolas, "Microsoft JhengHei", monospace;
+  font-size: 12px;
+}
+select:focus { outline: none; border-color: var(--acc); }
+select:disabled { opacity: .4; }
+
+/* ---- 清單列的中文名 + 英文 ID ---- */
+.item .nm2 {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; line-height: 1.25;
+}
+.item .nm2 b { font-weight: 500; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .nm2 small { color: var(--fg2); font-size: 10px;
+  font-family: Consolas, monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.active .nm2 small { color: #cfe3f5; }
+
+#viewbar .hint kbd { margin: 0; }
+#modeHint, #editHint { white-space: nowrap; overflow: hidden; }
+
+/* ---- 快捷鍵說明 ---- */
+.modal-box.wide { width: 720px; }
+.keys { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px;
+  overflow-y: auto; min-height: 0; }
+.keys-group h4 { margin: 10px 0 4px; font-size: 11px; color: var(--acc);
+  text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+.keys dl { display: grid; grid-template-columns: 112px 1fr;
+  gap: 2px 8px; margin: 0; font-size: 12px; }
+.keys dt { color: var(--fg2); }
+.keys dd { margin: 0; color: var(--fg); }
+
+/* 非單格編輯模式時，筆刷面板淡化（仍可先填好） */
+#brushPanel.dim { opacity: .55; }
+#brushPanel.dim:focus-within { opacity: 1; }

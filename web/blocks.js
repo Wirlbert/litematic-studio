@@ -338,9 +338,121 @@
     return null;
   }
 
+  // ---------------------------------------------------------------- 中文化
+  // 方塊名直接用遊戲的 zh_tw 語言檔（server 從啟動器 assets 讀出來），
+  // 但方塊「狀態」的屬性名與值遊戲本身不翻譯，所以這裡自己對照。
+  var NAMES = {};
+
+  function setNames(map) { NAMES = map || {}; }
+
+  function nameOf(fullId) {
+    var n = shortId(fullId);
+    return NAMES[n] || n;
+  }
+
+  var PROP_NAME = {
+    facing: "朝向", half: "半部", type: "類型", shape: "形狀",
+    waterlogged: "含水", powered: "充能", open: "開啟", lit: "點亮",
+    axis: "軸向", level: "液面", delay: "延遲", locked: "鎖定",
+    mode: "模式", power: "強度", enabled: "啟用", triggered: "觸發",
+    extended: "伸出", face: "安裝面", hinge: "鉸鏈", in_wall: "嵌入牆",
+    attached: "附著", occupied: "佔用", part: "部位", snowy: "積雪",
+    persistent: "永久", distance: "距離", age: "生長", bites: "咬痕",
+    candles: "蠟燭數", layers: "層數", moisture: "濕度", rotation: "旋轉",
+    instrument: "樂器", note: "音階", has_record: "有唱片", has_book: "有書",
+    signal_fire: "煙霧信號", hanging: "懸掛", bottom: "底部",
+    honey_level: "蜂蜜量", charges: "充能次數", tilt: "傾斜",
+    can_summon: "可召喚", shrieking: "尖嘯", sculk_sensor_phase: "感測階段",
+    inverted: "反轉", unstable: "不穩定", conditional: "條件制約",
+    drag: "拖曳", eggs: "蛋數", hatch: "孵化", pickles: "海泡菜數",
+    stage: "階段", leaves: "葉片", thickness: "粗細",
+    vertical_direction: "垂直方向", berries: "漿果", flower_amount: "花量",
+    dusted: "清掃", cracked: "龜裂", crafting: "合成中", orientation: "方位",
+    disarmed: "已解除", short: "縮短", eye: "眼睛", signal: "信號",
+    bloom: "綻放", natural: "天然", tip: "尖端", hydrated: "含水",
+    segment_amount: "段數", flower: "花朵", attachment: "固定方式",
+    north: "北側", south: "南側", east: "東側", west: "西側",
+    up: "上側", down: "下側"
+  };
+
+  var VALUE_COMMON = {
+    "true": "是", "false": "否",
+    north: "北", south: "南", east: "東", west: "西", up: "上", down: "下",
+    none: "無", side: "側邊", low: "矮", tall: "高",
+    single: "單個", left: "左", right: "右",
+    small: "小", large: "大", upper: "上段", lower: "下段",
+    normal: "一般", sticky: "黏性", straight: "直"
+  };
+
+  var DIR_SLOT = { none: "無", side: "側邊", up: "向上", low: "矮", tall: "高",
+                   "true": "有", "false": "無" };
+
+  var PROP_VALUE = {
+    half: { top: "上半", bottom: "下半", upper: "上段", lower: "下段" },
+    type: { top: "上層", bottom: "下層", double: "雙層",
+            single: "單個", left: "左", right: "右",
+            normal: "一般", sticky: "黏性" },
+    face: { floor: "地面", wall: "牆面", ceiling: "天花板" },
+    axis: { x: "X 軸", y: "Y 軸", z: "Z 軸" },
+    mode: { compare: "比較", subtract: "減去" },
+    part: { head: "床頭", foot: "床尾" },
+    hinge: { left: "左", right: "右" },
+    attachment: { floor: "地面", ceiling: "天花板",
+                  single_wall: "單面牆", double_wall: "雙面牆" },
+    vertical_direction: { up: "向上", down: "向下" },
+    tilt: { none: "無", unstable: "微傾", partial: "半傾", full: "全傾" },
+    thickness: { tip_merge: "合併尖端", tip: "尖端", frustum: "錐台",
+                 middle: "中段", base: "基座" },
+    sculk_sensor_phase: { inactive: "待機", active: "啟動", cooldown: "冷卻" },
+    orientation: { up: "上", down: "下" },
+    shape: {
+      straight: "直", inner_left: "內左", inner_right: "內右",
+      outer_left: "外左", outer_right: "外右",
+      north_south: "南北", east_west: "東西",
+      ascending_north: "向北上升", ascending_south: "向南上升",
+      ascending_east: "向東上升", ascending_west: "向西上升",
+      north_east: "北東彎", north_west: "北西彎",
+      south_east: "南東彎", south_west: "南西彎"
+    },
+    instrument: {
+      harp: "豎琴", basedrum: "大鼓", snare: "小鼓", hat: "鈸",
+      bass: "貝斯", flute: "長笛", bell: "鐘", guitar: "吉他",
+      chime: "管鐘", xylophone: "木琴", iron_xylophone: "鐵琴",
+      cow_bell: "牛鈴", didgeridoo: "迪吉里杜管", bit: "電子音",
+      banjo: "班卓琴", pling: "鋼琴"
+    },
+    north: DIR_SLOT, south: DIR_SLOT, east: DIR_SLOT,
+    west: DIR_SLOT, up: DIR_SLOT, down: DIR_SLOT
+  };
+
+  function propLabel(k) { return PROP_NAME[k] || k; }
+
+  function valueLabel(k, v) {
+    var m = PROP_VALUE[k];
+    if (m && m[v] !== undefined) return m[v];
+    if (VALUE_COMMON[v] !== undefined) return VALUE_COMMON[v];
+    return v;
+  }
+
+  // 'minecraft:oak_stairs[facing=east,half=bottom]' -> '朝向 東・半部 下半'
+  function stateLabel(text) {
+    var a = text.indexOf("[");
+    if (a < 0) return "";
+    var parts = [];
+    text.slice(a + 1, text.lastIndexOf("]")).split(",").forEach(function (kv) {
+      var i = kv.indexOf("=");
+      if (i < 0) return;
+      var k = kv.slice(0, i), v = kv.slice(i + 1);
+      parts.push(propLabel(k) + " " + valueLabel(k, v));
+    });
+    return parts.join("・");
+  }
+
   global.Blocks = {
     colorOf: colorOf, isEmpty: isEmpty, alphaOf: alphaOf,
     shapeOf: shapeOf, isSolid: isSolid, shortId: shortId,
-    tintFor: tintFor, SUGGEST: SUGGEST
+    tintFor: tintFor, SUGGEST: SUGGEST,
+    setNames: setNames, nameOf: nameOf, stateLabel: stateLabel,
+    propLabel: propLabel, valueLabel: valueLabel
   };
 })(window);

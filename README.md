@@ -18,19 +18,27 @@ Everything runs on `127.0.0.1`. Your schematics are never uploaded anywhere.
   approximate boxes. The client jar is located automatically.
 - Minecraft's own face shading (up 1.0, down 0.5, north/south 0.8, east/west 0.6), plus biome
   tint for grass, leaves, water and redstone dust (which also follows its `power` level).
-- Y-layer range sliders to slice the build open one layer at a time (`[` and `]` adjust the top).
-- Hover any block to see its full blockstate and coordinates.
-- The block list doubles as a material list, by blockstate or by block id. Click an entry to
-  highlight it in 3D while everything else fades out.
+- **Localized block names.** Block names come from the game's own language file, read out of
+  the launcher's asset store (Traditional Chinese by default, falling back to zh_hk / zh_cn,
+  then to the raw English ids). Blockstate properties are translated too — `facing=west`
+  reads as `朝向 西` — from a table in `web/blocks.js`.
+- Y-layer range sliders to slice the build open one layer at a time.
+- Hover any block for its name, its translated state, the raw blockstate and its coordinates.
+- The block list doubles as a material list, one row per block with its state count. Click a
+  row to highlight every block of that kind in 3D.
+- **Fly around with `W` `A` `S` `D`, `Space` and `Shift`**, hold `Ctrl` to go three times
+  faster; the mouse still orbits, pans and zooms. Press `?` for the full shortcut list.
 - A plain coloured-box mode for when you want speed over fidelity on huge builds.
 
 **Edit**
 
-- Replace a blockstate, or every state of one block id at once (orientation and other
-  properties are carried over where the new block actually has them).
+- Pick a block, then choose from a dropdown whether to replace **all of its states at once**
+  or just **one specific state** — all the trapdoors, or only the ones facing west.
+  State properties are carried over to the new block where it actually has them.
 - Delete blocks (replace with air).
-- Single-block edit mode: left click to place the current brush, Shift+click to pick,
-  Ctrl+click to delete.
+- Single-block edit mode: put a block in the **brush** field, switch to 單格編輯, then left
+  click a block in the 3D view to turn it into the brush block. Shift+click picks the block
+  under the cursor into the brush, Ctrl+click deletes to air.
 - `Ctrl+S` saves. Every save copies the previous file into `backups/` first, and you can
   restore any backup from the UI.
 
@@ -99,6 +107,8 @@ minecraft:oak_stairs[facing=east,half=bottom]
 - If the schematic is already loaded in-game, reload it in Litematica after saving.
 - Chests, signs, beds and other block entities have no block model in the resource files
   (the game draws them separately), so they fall back to an approximate coloured box.
+- Block names need the launcher's `assets/` store (the jar itself only ships English). If it
+  cannot be found the list shows English ids and everything else still works.
 - Only the vanilla assets inside the jar are read; resource packs are not applied yet.
   `uvlock` is not implemented either, so a few rotated blocks have their texture facing
   the wrong way.
@@ -166,17 +176,23 @@ runtime from the copy of the game you already have. Not affiliated with Mojang S
   `blockstates` / `models` / `textures` 畫的，不是近似方塊。客戶端 jar 會自動找到。
 - 面的明暗照 Minecraft 的規則（上 1.0、下 0.5、南北 0.8、東西 0.6），草地、樹葉、水、
   紅石線會套生物群系染色，紅石線還會照 `power` 變色。
-- Y 層範圍雙滑桿，可以一層一層剖開看（鍵盤 `[` `]` 調上界）。
-- 滑鼠移到方塊上，左上角顯示完整方塊狀態與座標。
-- 右欄「依狀態 / 依方塊」兩種清單就是材料表，點一下該種方塊就在 3D 中高亮、其餘淡出。
+- **方塊名中文化**：直接讀遊戲自己的語言檔（從啟動器的 assets 儲存區取出 zh_tw，
+  找不到就退 zh_hk / zh_cn，再找不到就顯示英文 ID）。方塊狀態也翻譯，
+  `facing=west` 會顯示成「朝向 西」，對照表在 `web/blocks.js`。
+- Y 層範圍雙滑桿，可以一層一層剖開看。
+- 滑鼠移到方塊上，左上角顯示中文名、翻譯後的狀態、原始 blockstate 與座標。
+- 右欄清單就是材料表，一種方塊一列並標出有幾種狀態，點一下就在 3D 中高亮。
+- **用 `W` `A` `S` `D`、`空白`、`Shift` 飛行移動**，按住 `Ctrl` 加速三倍；
+  滑鼠一樣可以旋轉、平移、縮放。按 `?` 看完整快捷鍵。
 - 另有純色塊模式，超大型建築要速度時用。
 
 **改**
 
-- 替換單一 blockstate，或一次換掉同一個方塊 ID 的所有狀態（朝向等屬性會在新方塊真的
-  有那個屬性時保留）。
+- 選一個方塊之後，用下拉選單決定要換掉**全部狀態**還是**其中某一個狀態**
+  ——整張圖的地板門全換，或只換朝西的那批。狀態屬性會在新方塊真的有那個屬性時保留。
 - 刪成空氣。
-- 單格編輯模式：左鍵放筆刷、Shift+左鍵吸取、Ctrl+左鍵刪除。
+- 單格編輯模式：先在「筆刷」欄填一個方塊，切到單格編輯，然後在 3D 畫面左鍵點一格，
+  那一格就變成筆刷方塊。Shift+左鍵可以把游標下的方塊吸過來當筆刷，Ctrl+左鍵刪成空氣。
 - `Ctrl+S` 儲存，每次存檔前先把舊檔複製到 `backups/`，可以從介面還原任何一份備份。
 
 ## 需求
@@ -238,6 +254,8 @@ minecraft:oak_stairs[facing=east,half=bottom]
 - **編輯先改在記憶體裡，按儲存才寫回檔案。** 有未儲存變更時標題列會顯示未儲存標記。
 - 遊戲裡已經載入同一個 schematic 的話，存檔後要在 Litematica 重新載入。
 - 箱子、告示牌、床這類方塊實體在資源檔裡沒有方塊模型（遊戲是另外畫的），會退回近似色塊。
+- 中文方塊名需要啟動器的 `assets/` 儲存區（jar 裡只有英文）。找不到的話清單會顯示
+  英文 ID，其他功能不受影響。
 - 目前只讀 jar 內的原版材質，還沒支援資源包；`uvlock` 也還沒做，少數轉過向的方塊
   貼圖方向會不對。
 - 超大型 schematic（百萬格以上）第一次建模會卡幾秒，縮小 Y 層範圍或關掉材質就會順。

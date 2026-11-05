@@ -16,6 +16,7 @@
     <button id="btnSave" class="primary" disabled>儲存 (Ctrl+S)</button>
     <button id="btnRevert" disabled>放棄變更</button>
     <button id="btnBackups" disabled>備份…</button>
+    <button id="btnHelp" title="快捷鍵一覽 (?)">?</button>
   </div>
 </header>
 
@@ -43,16 +44,16 @@
       </label>
       <input type="range" id="yMin" min="0" max="1" value="0">
       <input type="range" id="yMax" min="0" max="1" value="1">
-      <label class="chk"><input type="checkbox" id="chkTex" checked> 使用遊戲材質</label>
+      <label class="chk"><input type="checkbox" id="chkTex" checked> 使用遊戲材質 <kbd>X</kbd></label>
       <div id="texNote" class="hint"></div>
-      <label class="chk"><input type="checkbox" id="chkGhost" checked> 選取時其他方塊透明化</label>
-      <label class="chk"><input type="checkbox" id="chkOnlySel"> 只顯示選取的方塊</label>
-      <label class="chk"><input type="checkbox" id="chkCull" checked> 隱藏看不見的面</label>
-      <label class="chk"><input type="checkbox" id="chkBox" checked> 顯示外框</label>
+      <label class="chk"><input type="checkbox" id="chkGhost"> 選取時其他方塊透明化 <kbd>G</kbd></label>
+      <label class="chk"><input type="checkbox" id="chkOnlySel"> 只顯示選取的方塊 <kbd>H</kbd></label>
+      <label class="chk"><input type="checkbox" id="chkCull" checked> 隱藏看不見的面 <kbd>C</kbd></label>
+      <label class="chk"><input type="checkbox" id="chkBox" checked> 顯示外框 <kbd>B</kbd></label>
       <div class="btnrow">
-        <button id="btnFit" class="mini">置中</button>
-        <button id="btnTop" class="mini">俯視</button>
-        <button id="btnSide" class="mini">側視</button>
+        <button id="btnFit" class="mini">置中 <kbd>F</kbd></button>
+        <button id="btnTop" class="mini">俯視 <kbd>2</kbd></button>
+        <button id="btnSide" class="mini">側視 <kbd>3</kbd></button>
       </div>
     </div>
   </aside>
@@ -62,11 +63,14 @@
     <div id="hud" class="hud"></div>
     <div id="viewbar">
       <div class="modes">
-        <button id="modeView" class="mode active">瀏覽</button>
-        <button id="modeEdit" class="mode">單格編輯</button>
+        <button id="modeView" class="mode active">瀏覽 <kbd>Q</kbd></button>
+        <button id="modeEdit" class="mode">單格編輯 <kbd>E</kbd></button>
+      </div>
+      <div id="modeHint" class="hint">
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 前後左右　<kbd>空白</kbd>／<kbd>Shift</kbd> 上下　按住 <kbd>Ctrl</kbd> 加速
       </div>
       <div id="editHint" class="hint hidden">
-        左鍵=放目前筆刷　Shift+左鍵=吸取　Ctrl+左鍵=刪成空氣
+        左鍵 = 放筆刷方塊　<kbd>Shift</kbd>+左鍵 = 吸取　<kbd>Ctrl</kbd>+左鍵 = 刪成空氣
       </div>
       <div class="spacer"></div>
       <div id="counts" class="mono"></div>
@@ -77,28 +81,33 @@
     <div class="panel grow">
       <div class="panel-title">
         <span>方塊</span>
-        <div class="tabs">
-          <button id="tabStates" class="tab active">依狀態</button>
-          <button id="tabIds" class="tab">依方塊</button>
-        </div>
+        <span id="blockSummary" class="mono"></span>
       </div>
-      <input type="search" id="search" placeholder="搜尋方塊…">
+      <input type="search" id="search" placeholder="搜尋方塊（中文名或英文 ID）…">
       <div id="palette" class="list palette"></div>
     </div>
 
     <div class="panel" id="editPanel">
       <div class="panel-title"><span>替換</span></div>
-      <div id="selInfo" class="selinfo">先在清單或 3D 畫面中選一個方塊</div>
+      <div id="selInfo" class="selinfo">在右上清單或 3D 畫面中選一個方塊</div>
+      <label class="row small">要換掉哪些</label>
+      <select id="stateSel" disabled></select>
       <label class="row small">換成</label>
-      <input type="text" id="newBlock" list="blockList" placeholder="minecraft:stone[facing=north]" disabled>
+      <input type="text" id="newBlock" list="blockList" placeholder="stone" disabled>
       <datalist id="blockList"></datalist>
-      <label class="chk"><input type="checkbox" id="chkAllStates"> 套用到所有同 ID 的狀態（保留朝向等）</label>
       <div class="btnrow">
         <button id="btnApply" class="primary" disabled>套用替換</button>
-        <button id="btnAir" disabled>刪成空氣</button>
+        <button id="btnAir" disabled>刪成空氣 <kbd>Del</kbd></button>
       </div>
-      <div class="panel-title mt"><span>筆刷（單格編輯用）</span></div>
+    </div>
+
+    <div class="panel" id="brushPanel">
+      <div class="panel-title"><span>筆刷</span></div>
       <input type="text" id="brush" list="blockList" value="minecraft:stone">
+      <div class="hint">
+        切到下方的「單格編輯」之後，在 3D 畫面左鍵點一格，那一格就會變成這個方塊。
+        <kbd>Shift</kbd>+左鍵可以把畫面上的方塊吸過來當筆刷。
+      </div>
       <div id="msg" class="msg"></div>
     </div>
   </aside>
@@ -109,6 +118,59 @@
     <div class="modal-title">備份</div>
     <div id="backupList" class="list"></div>
     <div class="btnrow end"><button id="btnCloseModal">關閉</button></div>
+  </div>
+</div>
+
+<div id="helpModal" class="modal hidden">
+  <div class="modal-box wide">
+    <div class="modal-title">快捷鍵</div>
+    <div class="keys">
+      <div class="keys-group">
+        <h4>移動視角</h4>
+        <dl>
+          <dt><kbd>W</kbd><kbd>S</kbd></dt><dd>前進／後退</dd>
+          <dt><kbd>A</kbd><kbd>D</kbd></dt><dd>左移／右移</dd>
+          <dt><kbd>空白</kbd></dt><dd>上升</dd>
+          <dt><kbd>Shift</kbd></dt><dd>下降</dd>
+          <dt><kbd>Ctrl</kbd></dt><dd>按住加速三倍</dd>
+          <dt>左鍵拖曳</dt><dd>旋轉</dd>
+          <dt>右鍵拖曳</dt><dd>平移</dd>
+          <dt>滾輪</dt><dd>拉近拉遠</dd>
+        </dl>
+      </div>
+      <div class="keys-group">
+        <h4>檢視</h4>
+        <dl>
+          <dt><kbd>F</kbd></dt><dd>置中</dd>
+          <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>斜視／俯視／側視</dd>
+          <dt><kbd>X</kbd></dt><dd>材質／色塊切換</dd>
+          <dt><kbd>G</kbd></dt><dd>其他方塊透明化</dd>
+          <dt><kbd>H</kbd></dt><dd>只顯示選取的方塊</dd>
+          <dt><kbd>C</kbd></dt><dd>隱藏看不見的面</dd>
+          <dt><kbd>B</kbd></dt><dd>顯示外框</dd>
+        </dl>
+      </div>
+      <div class="keys-group">
+        <h4>Y 層範圍</h4>
+        <dl>
+          <dt><kbd>[</kbd><kbd>]</kbd></dt><dd>上界下降／上升</dd>
+          <dt><kbd>-</kbd><kbd>=</kbd></dt><dd>下界下降／上升</dd>
+          <dt><kbd>R</kbd></dt><dd>整個範圍重設</dd>
+        </dl>
+      </div>
+      <div class="keys-group">
+        <h4>編輯</h4>
+        <dl>
+          <dt><kbd>Q</kbd></dt><dd>瀏覽模式</dd>
+          <dt><kbd>E</kbd></dt><dd>單格編輯模式</dd>
+          <dt><kbd>Del</kbd></dt><dd>選取的方塊刪成空氣</dd>
+          <dt><kbd>Esc</kbd></dt><dd>清除選取</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>S</kbd></dt><dd>儲存</dd>
+          <dt><kbd>?</kbd></dt><dd>開關這份說明</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="btnrow end"><button id="btnCloseHelp">關閉</button></div>
   </div>
 </div>
 
