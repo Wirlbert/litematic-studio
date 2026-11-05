@@ -71,6 +71,10 @@
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
+    // 左鍵只負責選方塊，右鍵拖曳改成轉自己的視角，滾輪自己接（見下面 onWheel）
+    controls.enableRotate = false;
+    controls.enableZoom = false;
+    controls.mouseButtons = { LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: -1 };
 
     // 色塊模式才用得到燈光；材質模式用 Minecraft 自己的固定面明暗
     scene.add(new THREE.HemisphereLight(0xffffff, 0x4a4f5a, 0.52));
@@ -91,6 +95,8 @@
     window.addEventListener("resize", onResize);
     renderer.domElement.addEventListener("mousemove", onMove);
     renderer.domElement.addEventListener("click", onClick);
+    renderer.domElement.addEventListener("mousedown", onLookDown);
+    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
     renderer.domElement.addEventListener("contextmenu", function (e) { e.preventDefault(); });
     renderer.domElement.addEventListener("mouseleave", function () {
       hoverBox.visible = false; S.hover = null; updateHud();
@@ -109,6 +115,67 @@
 
   // WASD / 空白 / Shift 飛行移動：同時平移相機與軌道中心，才不會把視角轉掉
   var vF = new THREE.Vector3(), vD = new THREE.Vector3();
+
+  // 右鍵拖曳 = 轉自己的視角（第一人稱），不是繞著藍圖轉。
+  // 做法：把軌道中心釘在相機正前方固定距離的位置，OrbitControls.update() 的
+  // lookAt(target) 就等於轉頭；相機本身不會繞著藍圖跑。
+  var LOOK = { dist: 40, yaw: 0, pitch: 0, on: false, x: 0, y: 0 };
+  var LOOK_SENS = 0.0032;                 // 每像素的弧度
+  var vL = new THREE.Vector3();
+
+  function lookSync() {                   // 從現在的相機／軌道中心反推 yaw、pitch
+    vL.copy(controls.target).sub(camera.position);
+    var d = vL.length();
+    LOOK.dist = Math.max(4, Math.min(600, d || 40));
+    if (d > 1e-6) {
+      vL.divideScalar(d);
+      LOOK.pitch = Math.asin(Math.max(-1, Math.min(1, vL.y)));
+      LOOK.yaw = Math.atan2(vL.x, vL.z);
+    }
+  }
+
+  function lookApply() {
+    var lim = Math.PI / 2 - 0.02;         // 不能正好垂直，lookAt 的上方向會退化
+    LOOK.pitch = Math.max(-lim, Math.min(lim, LOOK.pitch));
+    var cp = Math.cos(LOOK.pitch);
+    vL.set(Math.sin(LOOK.yaw) * cp, Math.sin(LOOK.pitch), Math.cos(LOOK.yaw) * cp);
+    controls.target.copy(camera.position).addScaledVector(vL, LOOK.dist);
+  }
+
+  function onLookDown(ev) {
+    if (ev.button !== 2) return;
+    ev.preventDefault();
+    lookSync();
+    LOOK.on = true;
+    LOOK.x = ev.clientX; LOOK.y = ev.clientY;
+    hoverBox.visible = false; S.hover = null; updateHud();
+    window.addEventListener("mousemove", onLookMove);
+    window.addEventListener("mouseup", onLookUp);
+  }
+
+  function onLookMove(ev) {
+    if (!LOOK.on) return;
+    LOOK.yaw -= (ev.clientX - LOOK.x) * LOOK_SENS;
+    LOOK.pitch -= (ev.clientY - LOOK.y) * LOOK_SENS;
+    LOOK.x = ev.clientX; LOOK.y = ev.clientY;
+    lookApply();
+  }
+
+  function onLookUp() {
+    LOOK.on = false;
+    window.removeEventListener("mousemove", onLookMove);
+    window.removeEventListener("mouseup", onLookUp);
+  }
+
+  // 滾輪 = 沿著視線前進／後退。用 OrbitControls 的 dolly 會把相機推向軌道中心，
+  // 而軌道中心現在就在眼前，推到重合視角就壞了，所以自己接。
+  function onWheel(ev) {
+    ev.preventDefault();
+    var step = (ev.deltaY < 0 ? 1 : -1) * Math.max(1, S.moveSpeed * 0.25);
+    camera.getWorldDirection(vF);
+    camera.position.addScaledVector(vF, step);
+    controls.target.addScaledVector(vF, step);
+  }
 
   function flyStep(dt) {
     var f = (KEYS.KeyW ? 1 : 0) - (KEYS.KeyS ? 1 : 0);
@@ -835,6 +902,7 @@
 
   var moveTick = 0;
   function onMove(ev) {
+    if (LOOK.on) return;                  // 轉視角時不必一直 raycast
     var now = performance.now();
     if (now - moveTick < 40) return;
     moveTick = now;

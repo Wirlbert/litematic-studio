@@ -27,7 +27,10 @@ Everything runs on `127.0.0.1`. Your schematics are never uploaded anywhere.
 - The block list doubles as a material list, one row per block with its state count. Click a
   row to highlight every block of that kind in 3D.
 - **Fly around with `W` `A` `S` `D`, `Space` and `Shift`**, hold `Ctrl` to go three times
-  faster; the mouse still orbits, pans and zooms. Press `?` for the full shortcut list.
+  faster. The camera is a flight camera, not an orbit camera: **right-drag turns your own
+  view** (it does not spin the schematic), the wheel moves you along your line of sight,
+  middle-drag pans, and the **left button does nothing but select blocks**. Press `?` for
+  the full shortcut list.
 - A plain coloured-box mode for when you want speed over fidelity on huge builds.
 
 **Edit**
@@ -182,8 +185,9 @@ runtime from the copy of the game you already have. Not affiliated with Mojang S
 - Y 層範圍雙滑桿，可以一層一層剖開看。
 - 滑鼠移到方塊上，左上角顯示中文名、翻譯後的狀態、原始 blockstate 與座標。
 - 右欄清單就是材料表，一種方塊一列並標出有幾種狀態，點一下就在 3D 中高亮。
-- **用 `W` `A` `S` `D`、`空白`、`Shift` 飛行移動**，按住 `Ctrl` 加速三倍；
-  滑鼠一樣可以旋轉、平移、縮放。按 `?` 看完整快捷鍵。
+- **用 `W` `A` `S` `D`、`空白`、`Shift` 飛行移動**，按住 `Ctrl` 加速三倍。
+  視角是飛行視角不是環繞視角：**右鍵拖曳是轉自己的頭**（不會把藍圖轉來轉去）、
+  滾輪沿著視線前進後退、中鍵拖曳平移，**左鍵只負責選取方塊**。按 `?` 看完整快捷鍵。
 - 另有純色塊模式，超大型建築要速度時用。
 
 **改**
